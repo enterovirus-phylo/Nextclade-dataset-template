@@ -15,6 +15,7 @@
     "reference accession": "< ref accession number of your virus >"
   },
   "alignmentParams": {
+        "penaltyGapExtend": 3,
         "penaltyGapOpen": 13,
         "penaltyGapOpenInFrame": 18,
         "penaltyGapOpenOutOfFrame": 23,
