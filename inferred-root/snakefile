@@ -5,7 +5,7 @@ MIN_LENGTH =            "6000" #TODO: set lower to include shorter fragments
 MAX_SEQS =              "1000" #TODO: set to 10000 for testing
 ID_FIELD=               "accession" # either "accession" or "strain", used for meta-id-column in augur
 
-OUTGROUP = ["MT081371.1", "DQ201177.1", "MT081370.1"] # EV-D111, EV-D70 and EV-D94
+OUTGROUP = ["acc1.1", "acc2.1", "acc3.1"] ##TODO: provide outgroup sequences related to your virus
 # OUTGROUP = REFERENCE_ACCESSION
 
 # Set the paths (make sure they are the same as those in the top-level Snakefile)

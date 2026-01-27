@@ -15,6 +15,7 @@ def parse_args():
     parser.add_argument('--high-min-prop', required=True, type=float, default=0.7, help='minimum proportion for clades with high threshold')
     parser.add_argument('--high-prop-clades', required=True, type=str,nargs="+",  help='list of clades that should use the high proportion threshold')
     parser.add_argument('--exclude-clades', required=True, type=str, nargs="+", default="unassigned", help='list of clades to drop from mutation list')
+    parser.add_argument('--newly-relevant-output', required=False, type=str, help='Path to output newly relevant mutations TSV file')
     return parser.parse_args()
 
 def accumulate_mutations(acc: defaultdict(int), row) -> defaultdict(int):
@@ -97,8 +98,8 @@ def main():
     relevant
 
     #  newly relevant
-    newly_relevant = relevant[mutations["proportion"] < 0.7]
-    # print(newly_relevant[['clade', 'mutation', 'proportion', 'mut_count']].to_csv())
+    newly_relevant = relevant[mutations["proportion"] < HIGH_THRESHOLD_PROPORTION]
+    print(newly_relevant[['clade', 'mutation', 'proportion', 'mut_count']].to_csv(args.newly_relevant_output,sep="\t", index=False))
 
     mut_dict = {}
     for mutation, row in relevant.groupby("genotype"):
