@@ -15,6 +15,7 @@
     "reference accession": "< ref accession number of your virus >"
   },
   "alignmentParams": {
+        "penaltyGapExtend": 3,
         "penaltyGapOpen": 13,
         "penaltyGapOpenInFrame": 18,
         "penaltyGapOpenOutOfFrame": 23,
@@ -23,6 +24,7 @@
         "minMatchLength": 30,
         "allowedMismatches": 15,
         "minLength": 100,
+        "gapAlignmentSide": "right",
         "minSeedCover": 0.30
     },
   "defaultCds": "VP1",
