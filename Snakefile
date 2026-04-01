@@ -572,21 +572,6 @@ rule assemble_dataset:
         zip -rj dataset.zip  out-dataset/*
         """
 
-
-rule test:
-    input:
-        dataset = rules.assemble_dataset.output.dataset_zip,
-        sequences = rules.assemble_dataset.output.sequences,
-    output:
-        output = directory("test_out"),
-    shell:
-        """
-        nextclade3 run \
-            --input-dataset {input.dataset} \
-            --output-all {output.output} \
-            {input.sequences}
-        """
-
 rule extract_clades_tsv:
     input:
         json = rules.clades.output.json,
@@ -647,6 +632,76 @@ rule mutLabels:
            {input.json} > {output.json}
 
         zip -rj dataset.zip  out-dataset/*
+        """
+
+rule test:
+    input:
+        dataset = rules.assemble_dataset.output.dataset_zip,    # output dataset
+        sequences = SEQUENCES,                                  # NCBI sequences
+        ex_sequences = rules.assemble_dataset.output.sequences, # example sequences
+        metadata = "testing/nextstrain_vp1_metadata.tsv",       # metadata downloaded from Nextstrain, needed for accession id check
+        clades = rules.extract_clades_tsv.output.tsv,           # Table containing clades and accession
+        non_As = "testing/non-EV-A_sequence.fasta",             # List of some non-EV-A viruses
+        EV_As = "testing/EV_A.fasta" if os.path.exists("testing/EV_A.fasta") else [],   # or we do a Entrez with the taxonid
+
+    output:
+        output = directory("test_out"),
+    params:
+        do_alignment = "False",                                 # set to True to align fragments (will run mafft on the fragments and reference)
+        seed = 42,                                              # random seed number
+        species_taxid = "138948",                               # EV-A taxonid
+        seedCover = config["alignmentParams"]["minSeedCover"],  # min-seed-match
+        virus = config["attributes"]["name"],                   # virus name
+        fragment_genes = ["VP1", "3D"]                          # currently only genes supported
+    log:
+        "testing/test.log"
+    shell:
+        """
+        mkdir -p {output.output}
+        
+        # Generate test sequences
+        python scripts/generate_test_sequences.py \
+            --sequences {input.sequences} \
+            --metadata {input.metadata} \
+            --clades {input.clades} \
+            --evA {input.EV_As} \
+            --taxid {params.species_taxid}\
+            --virus "{params.virus}"\
+            --output-fragments {output.output}/fragments.fasta \
+            --output-recombinants {output.output}/recombinants.fasta \
+            --output-evA {output.output}/EV_A_fetched.fasta \
+            --seed {params.seed}
+        
+        # Use provided EV_As if available, else use fetched
+        if [ -f "{input.EV_As}" ]; then
+            EV_A_FILE="{input.EV_As}"
+        else
+            EV_A_FILE="{output.output}/EV_A_fetched.fasta"
+        fi
+        
+        # Combine all test sequences
+        cat {input.sequences} {input.ex_sequences} \
+            {output.output}/fragments.fasta \
+            {output.output}/recombinants.fasta \
+            {input.non_As} \
+            "$EV_A_FILE" > {output.output}/all_test_sequences.fasta
+        
+        # Run Nextclade
+        nextclade3 run \
+            --input-dataset {input.dataset} \
+            --output-all {output.output} \
+            {output.output}/all_test_sequences.fasta \
+            2>&1 | tee -a {log}
+        
+        # Parse results
+        python scripts/parse_nextclade_log.py {log} {output.output}/all_test_sequences.fasta {output.output}/nextclade.tsv {output.output} {params.virus}
+        
+        echo "Running with min-seed-cover: {params.seedCover}"
+
+        # Optional: align failed sequences with MAFFT
+        if [ "{params.do_alignment}" = "True" ]; then
+            mafft --thread 9 --addfragments {output.output}/failed_sequences.fasta dataset/reference.fasta > {output.output}/failed_sequences_aligned.fasta
+        fi
         """
 
 

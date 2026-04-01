@@ -223,6 +223,34 @@ https://master.clades.nextstrain.org/?dataset-url=http://localhost:3000
 - Click "Load example", then "Run"
 - You may want to reduce "Max. nucleotide markers" to 500 under "Settings" → "Sequence view" to optimize performance
 
+
+## Test / validation (`rule test`)
+
+The workflow includes a Snakemake `rule test` which builds a **mixed test set** (real sequences + generated edge cases) and runs **Nextclade CLI** against the newly assembled dataset. This is intended as a quick regression check when you change QC rules or alignment parameters.
+
+### Run
+```bash
+snakemake --cores 9 test
+```
+
+### What it does
+- Creates synthetic test inputs (fragments + recombinants) with:
+  - `scripts/generate_test_sequences.py`
+- Combines:
+  - dataset sequences (`data/sequences.fasta`)
+  - example sequences included in the dataset
+  - generated fragments + recombinants
+  - negative controls in `testing/` (e.g. `testing/non-EV-A_sequence.fasta`)
+  - optional EV-A background sequences (`testing/EV_A.fasta`, or fetched from NCBI if missing)
+- Runs `nextclade3 run` using the freshly built `dataset.zip`
+- Parses the Nextclade run log and outputs summaries / failed sequences using:
+  - `scripts/parse_nextclade_log.py`
+
+### Outputs
+All outputs are written to `test_out/` (Nextclade outputs + aggregated test FASTAs, logs, and any derived summaries).
+The Nextclade CLI log is saved to `testing/test.log`.
+
+
 ---
 
 ## Author & Contact
