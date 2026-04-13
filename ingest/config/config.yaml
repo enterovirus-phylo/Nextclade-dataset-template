@@ -8,6 +8,7 @@ entrez_search_term: "< your virus>"
 # Required to fetch from NCBI Datasets
 ncbi_taxon_id: < taxid > # taxid for <your_virus>
 
+# A full list of all compatible field names can be found here: https://www.ncbi.nlm.nih.gov/datasets/docs/v2/reference-docs/command-line/dataformat/tsv/dataformat_tsv_virus-genome/
 ncbi_datasets_fields:
   - accession
   - sourcedb
