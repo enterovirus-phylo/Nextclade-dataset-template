@@ -52,6 +52,7 @@ def annotate_sequence(seq, cds):
 def clean_qualifier(value):
     """Remove common patterns from qualifier values."""
     value = re.sub(r'^(protein|protease|protien)[\s_|]*', '', value, flags=re.IGNORECASE)
+    value = re.sub(r'[\s_|]*(protein|protease|protien)$', '', value, flags=re.IGNORECASE)
     value = re.sub(r'\s*\([\w\d]+\)\s*$', '', value)
     value = re.sub(r'__\d[A-D]_.*', '', value)
     return value.strip()
@@ -207,7 +208,6 @@ if __name__=="__main__":
             print(f"Exporting CDS '{names_by_id[cds]}' with {len(streamlined_cds[cds])} segments.")
             for segment in streamlined_cds[cds]:
                 attributes = ';'.join([f"{k}={v}" for k,v in sorted(segment[1].items(), key=lambda x:(x[0]!='Name', len(x[1])))])
-
                 f.write('\t'.join(segment[0])+'\t' + attributes + '\n')
 
     gb_fname = f"{args.output_dir}/reference.gbk"
