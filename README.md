@@ -247,7 +247,7 @@ reproduce your dataset without rerunning the inference.
 
 Once `resources/clades.tsv` holds real clade definitions, you can have Nextclade
 distinguish mutations that are characteristic of a clade from genuinely private
-ones. Set `MUT_LABELS = True` in the `Snakefile` and adjust
+ones. After building the dataset, run `snakemake --cores 9 mutLabels` and adjust
 `clades_high_threshold` in the `mutLabels` rule to name your main clades. The
 labels are written into the dataset's `pathogen.json`, and
 `results/newly_relevant_mutations.tsv` lists the borderline calls for review.
