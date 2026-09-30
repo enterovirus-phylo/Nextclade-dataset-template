@@ -1,23 +1,66 @@
-if not config:
-    configfile: "./config/config.yaml"
+"""
+Ingest workflow: download sequences and metadata for one taxon from NCBI,
+curate them, and hand two tidy files to the dataset build.
+
+Run it on its own with
+
+    snakemake --cores 9 all
+
+from inside this directory, or let the top-level Snakefile call it by leaving
+FETCH_SEQUENCES = True.
+
+Configure the taxon and the metadata handling in config/config.yaml.
+"""
+
+import sys
+
+# Load unconditionally so that individual keys can still be overridden on the
+# command line with --config. Guarding this with "if not config" would make any
+# single --config override discard the whole file.
+configfile: "config/config.yaml"
+
+
+# -----------------------------------------------------------------------------
+# Configuration checks
+# -----------------------------------------------------------------------------
+# Catch unfilled template placeholders now, rather than after a download that
+# returns an unhelpful error from NCBI.
+
+_taxon_id = str(config.get("ncbi_taxon_id", "")).strip()
+if not _taxon_id or "<" in _taxon_id or ">" in _taxon_id:
+    sys.exit(
+        "\n\nCONFIGURATION ERROR\n"
+        f"  ncbi_taxon_id in ingest/config/config.yaml is not set ({_taxon_id!r}).\n"
+        "  Look your virus up at https://www.ncbi.nlm.nih.gov/taxonomy and put the\n"
+        "  numeric taxon id there, for example:\n"
+        "      ncbi_taxon_id: 42789\n"
+    )
 
 
 def _get_all_targets(wildcards):
-    # Default targets are the metadata TSV and sequences FASTA files
-    all_targets = [
+    """The files the dataset build needs: one FASTA and one metadata TSV."""
+    return [
         "data/sequences.fasta",
-        "data/metadata.tsv"
+        "data/metadata.tsv",
     ]
 
-    return all_targets
 
 rule all:
-    input: _get_all_targets
-    output: "../data/sequences.fasta", "../data/metadata.tsv"
+    """
+    Build the curated files and copy them up to the top-level data/ directory,
+    where the main Snakefile picks them up.
+    """
+    input:
+        _get_all_targets
+    output:
+        sequences = "../data/sequences.fasta",
+        metadata = "../data/metadata.tsv",
     shell:
         """
-        cp data/sequences.fasta ../data
-        cp data/metadata.tsv ../data
+        set -euo pipefail
+        mkdir -p ../data
+        cp data/sequences.fasta {output.sequences}
+        cp data/metadata.tsv {output.metadata}
         """
 
 
