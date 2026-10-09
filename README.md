@@ -279,11 +279,13 @@ quickest way to spot problems: sequences on implausibly long branches are
 usually misannotated or poor quality. Add their accessions to
 `resources/exclude.txt` and rerun.
 
-Alternatively, you can run:
+Alternatively, view the tree locally:
 
 ```bash
 auspice view --datasetDir results
 ```
+
+What Auspice displays — colourings and filters — is controlled by [auspice_config.json](resources/auspice_config.json). Further configuration options are described in the [Nextclade reference-tree documentation](https://docs.nextstrain.org/projects/nextclade/en/stable/user/input-files/04-reference-tree.html).
 
 ### The dataset in Nextclade Web
 
