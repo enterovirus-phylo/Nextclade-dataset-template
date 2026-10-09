@@ -185,7 +185,7 @@ smaller virus). See the [configuration reference](#configuration-reference) belo
 ### 5. Decide how to root the tree
 
 For many Enteroviruses the official reference sequence was deposited decades ago and sits a long way from anything circulating today. Mutations called against it are numerous and not very informative. As an alternative, the workflow can root the
-tree on a **Static Inferred Ancestor**: a sequence reconstructed at the most
+tree on a **Static Inferred Ancestor**: a sequence reconstructed from the most
 recent common ancestor of your own sequences, obtained by rooting a tree on an
 outgroup of related viruses. Nextclade can then report mutations relative to
 that ancestor instead of the distant reference.
