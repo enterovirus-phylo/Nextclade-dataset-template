@@ -97,15 +97,12 @@ script fetches both from GenBank and helps you tidy up the CDS names:
 python3 scripts/generate_from_genbank.py --reference "<accession>" --output-dir dataset/
 ```
 
-During the script execution, it asks a few questions. For a virus with a single polyprotein annotated both as a CDS and as mature peptides, the useful answers are:
-   - `[0]` - _pick on a case-by-case basis_
-   - `[product]` or `[leave empty for manual choice]` to select proteins.
-   - `[2]` - _choose mature_protein option with 11 items_.
+The script asks a few questions while it runs. When a genome is annotated both as a whole CDS and as mature peptides, the mature peptides are usually the more
+useful choice (`mature_protein [2]`); otherwise pick `on a case-by-case basis [0]` and then `[product]` or `[leave empty for manual choice]` to choose the
+features yourself. The right answers depend on how the reference is annotated.
 
-CDS names end up as labels on amino acid mutations, so keep them short and
-recognisable — `VP1`, not `VP1_capsid_protein_precursor`. The script strips
-boilerplate like a trailing "protein" and replaces characters that augur and
-Nextclade cannot handle, warning you when it does.
+CDS names end up as labels on amino acid mutations, so keep them short and recognisable — `VP1`, not `VP1_capsid_protein_precursor`. The script strips
+boilerplate like a trailing "protein" and replaces characters that augur and Nextclade cannot handle, warning you when it does.
 
 This writes three files:
 
