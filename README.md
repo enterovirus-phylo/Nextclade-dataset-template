@@ -236,14 +236,27 @@ Afterwards set `INFERRENCE_RERUN = False`, so later runs reuse the ancestor in
 `resources/inferred-root.fasta`. Commit that file: it is what lets someone else
 reproduce your dataset without rerunning the inference.
 
-### Adding mutation labels
+### Adding clade labels
 
-Once `resources/clades.tsv` holds real clade definitions, you can have Nextclade
-distinguish mutations that are characteristic of a clade from genuinely private
-ones. After building the dataset, run `snakemake --cores 9 mutLabels` and adjust
-`clades_high_threshold` in the `mutLabels` rule to name your main clades. The
-labels are written into the dataset's `pathogen.json`, and
-`results/newly_relevant_mutations.tsv` lists the borderline calls for review.
+Clades are defined in [`resources/clades.tsv`](resources/clades.tsv): one row per
+clade, listing the mutations that are unique to it. The template ships it empty,
+so fill it in once you have done an initial run and can see the tree. Until it
+holds real definitions, every mutation Nextclade finds in a query sequence counts
+as private; afterwards, Nextclade can tell clade-defining mutations apart from
+genuinely private ones.
+
+After building the dataset, run:
+
+```bash
+snakemake --cores 9 mutLabels
+```
+
+The rule writes the labels into the dataset's `pathogen.json`. Use
+`clades_high_threshold` in the `mutLabels` rule to control how specific a mutation
+must be to a clade before it is labelled — raise it to label only your main
+clades, lower it to include finer ones. Mutations that fall just short of the
+threshold are collected in `results/newly_relevant_mutations.tsv` for you to
+review.
 
 ### Starting over
 
