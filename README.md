@@ -36,7 +36,7 @@ Running the workflow produces:
 | Output | What it is |
 |---|---|
 | `dataset.zip` | The packaged Nextclade dataset.  |
-| `out-dataset/` | The same files unpacked, which is what you serve locally to test in Nextclade Web. |
+| `out-dataset/` | The same files unpacked (used to serve locally to test in Nextclade Web) |
 | `results/auspice.json` | The reference tree. Drag it onto [auspice.us](https://auspice.us) to inspect the build. |
 | `results/example_sequences.fasta` | A handful of sequences shipped with the dataset as the "Load example" button. |
 
