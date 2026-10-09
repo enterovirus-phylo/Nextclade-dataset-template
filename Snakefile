@@ -11,7 +11,7 @@ REFERENCE_ACCESSION = "<accession>"     # CHANGE ME: GenBank accession of your r
 # product/gene names in resources/reference.gbk *and* the Name attributes in
 # dataset/genome_annotation.gff3, character for character.
 # The default list is the picornavirus polyprotein; replace it with your own.
-GENES = ["VP4", "VP2", "VP3", "VP1", "2A", "2B", "2C", "3A", "3B", "3C", "3D"]  # CHANGE ME
+GENES = ["VP4", "VP2", "VP3", "VP1", "2A", "2B", "2C", "3A", "3B", "3C", "3D"]
 
 # =============================================================================
 # 2. Filtering and subsampling

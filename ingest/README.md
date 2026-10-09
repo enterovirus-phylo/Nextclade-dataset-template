@@ -160,7 +160,9 @@ write them to stdout, and slot the command into the pipeline in
 Put your taxon id in `config/config.yaml`.
 
 **`datasets: command not found`**
-Install the NCBI Datasets CLI: `conda install -c conda-forge ncbi-datasets-cli`.
+The NCBI Datasets CLI is missing. It is part of `environment.yml`, so activate
+the `nextclade` environment, or install it on its own with
+`conda install -c conda-forge ncbi-datasets-cli`.
 
 **The download returns far fewer sequences than expected**
 Check the taxon id resolves to what you think, and at the level you want:

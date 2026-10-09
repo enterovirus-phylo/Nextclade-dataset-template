@@ -51,5 +51,5 @@ nextclade3 run --input-dataset dataset.zip --output-all test_out/ SEQUENCES.fast
 - [ ] Playground link created and checked
 - [ ] Pull request opened on [`nextclade_data`](https://github.com/nextstrain/nextclade_data)
 - [ ] Collaborators and stakeholders notified
-- [ ] Merged and published
+- [ ] Merged and published (done by Nextclade Team)
 - [ ] Watch for issue reports over the following weeks

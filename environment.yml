@@ -1,0 +1,31 @@
+name: nextclade
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # core
+  - python=3.11
+  - snakemake
+  - augur
+  - nextclade
+
+  # sequence and table wrangling
+  - csvtk
+  - tsv-utils
+  - seqkit
+  - mafft
+  - jq
+  - zip
+  - unzip
+
+  # NCBI download tools
+  - entrez-direct
+  - ncbi-datasets-cli
+
+  # python libraries used by scripts/
+  - biopython
+  - pandas
+  - typer
+  - tqdm
+  - python-dotenv
+  - matplotlib

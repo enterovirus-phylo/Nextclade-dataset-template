@@ -52,23 +52,21 @@ explains the format in detail.
 
 ### Software
 
-Everything comes from conda-forge and bioconda. The quickest route is the
-[Nextstrain conda environment](https://docs.nextstrain.org/en/latest/install.html),
-plus a few extras this workflow uses:
+Everything comes from conda-forge and bioconda. `environment.yml` in the project
+root lists all of it — create the environment from that file:
 
 ```bash
-conda create -n nextclade -c conda-forge -c bioconda \
-    snakemake augur nextclade python=3.11 \
-    csvtk tsv-utils seqkit mafft jq zip unzip \
-    entrez-direct ncbi-datasets-cli \
-    biopython pandas typer tqdm python-dotenv matplotlib
+conda env create -f environment.yml
 conda activate nextclade
 ```
 
+If the environment already exists and the file has changed since, update it with
+`conda env update -f environment.yml --prune`. Micromamba works as a replacement (`micromamba env create -f environment.yml`).
+
 ### An email address for NCBI
 
-NCBI asks every automated download to identify itself, and throttles requests
-that do not. Create a `.env` file in the project root:
+NCBI asks automated downloads to identify themselves, and throttles those that
+do not. Put your email address in a `.env` file in the project root:
 
 ```bash
 echo "EMAIL=you@example.org" > .env
@@ -170,12 +168,10 @@ documents every field.
 
 ### 4. Set the workflow parameters
 
-Open the [`Snakefile`](Snakefile) and work through the blocks at the top. The two
-marked `CHANGE ME` are mandatory:
+Open the [`Snakefile`](Snakefile) and work through the blocks at the top.
 
 ```python
 REFERENCE_ACCESSION = "AY426531.1"
-GENES = ["VP4", "VP2", "VP3", "VP1", "2A", "2B", "2C", "3A", "3B", "3C", "3D"]
 ```
 
 Then sanity-check the filtering thresholds, especially `MIN_LENGTH` (the default
@@ -367,7 +363,6 @@ All of these live at the top of the [`Snakefile`](Snakefile).
 | `FETCH_SEQUENCES` | `True` | Download data via `ingest/`. Set `False` to supply your own. |
 | `STATIC_ANCESTRAL_INFERRENCE` | `True` | Include the inferred ancestor in the tree. |
 | `INFERRENCE_RERUN` | `False` | Recompute the ancestor. Needed for the first build; slow and destructive. |
-| `MUT_LABELS` | `False` | Derive per-clade mutation labels and merge them into `pathogen.json`. |
 
 ### Files you will edit
 
@@ -397,9 +392,6 @@ Run `scripts/generate_from_genbank.py` — step 1 of the setup.
 **`Missing inferred ancestral root: resources/inferred-root.fasta`**
 Nothing has computed the ancestor yet. Either set `INFERRENCE_RERUN = True` and
 confirm the run, or take Option B in [step 5](#5-decide-how-to-root-the-tree).
-
-**`NCBI needs an email address to identify you`**
-Put `EMAIL=you@example.org` in a `.env` file in the project root.
 
 **`augur ancestral` fails on a missing feature**
 The CDS names disagree between `GENES`, the GFF3 and the GenBank file. Compare
@@ -446,9 +438,9 @@ Maintainers: Nadia Neuner-Jehle, Alejandra González-Sánchez and Emma B. Hodcro
 
 Questions and suggestions are welcome as
 [issues](https://github.com/enterovirus-phylo/dataset-template-inferred-root/issues),
-or by email to eve-group[at]swisstph.ch.
+or by email to <eve-group@swisstph.ch>.
 
-If you use this template, please cite:
+If you use this template, we would appreciate a citation:
 
 > Neuner-Jehle, N., González Sánchez, A., Hodcroft, E. B., & European Non-Polio
 > Enterovirus Network (ENPEN). (2025). *enterovirus-phylo/nextclade_d68:
