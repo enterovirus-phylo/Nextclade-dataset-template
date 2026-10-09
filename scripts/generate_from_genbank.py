@@ -26,15 +26,7 @@ def get_entrez_email():
         pass
 
     email = os.environ.get("EMAIL", "").strip()
-    if not email:
-        sys.exit(
-            "\nNCBI needs an email address to identify you when downloading data.\n"
-            "Create a .env file in the project root containing:\n"
-            "    EMAIL=you@example.org\n"
-            "or export it for this shell:\n"
-            "    export EMAIL=you@example.org\n"
-        )
-    return email
+    return email or "you@example.org"
 
 
 def get_reference_sequence(accession):
