@@ -1,5 +1,6 @@
 #!/bin/env python3
 import os
+import sys
 from Bio import SeqIO
 from collections import defaultdict
 import re
@@ -11,15 +12,36 @@ def parse_args():
     parser.add_argument('--output-dir', required=True, type=str, help='Output directory')
     return parser.parse_args()
 
+def get_entrez_email():
+    """
+    NCBI requires a contact address with every Entrez request and throttles or
+    blocks anonymous traffic. Read it from the EMAIL environment variable, or
+    from a .env file in the project root (which .gitignore keeps out of git).
+    """
+    try:
+        from dotenv import load_dotenv, find_dotenv
+        load_dotenv(find_dotenv())
+    except ImportError:
+        # python-dotenv is optional; EMAIL may equally be exported by hand.
+        pass
+
+    email = os.environ.get("EMAIL", "").strip()
+    return email or "you@example.org"
+
+
 def get_reference_sequence(accession):
     from Bio import Entrez
-    from dotenv import load_dotenv, find_dotenv
 
-    load_dotenv(find_dotenv())
-    Entrez.email = os.environ.get("EMAIL")
+    Entrez.email = get_entrez_email()
+    print(f"Fetching reference sequence {accession} from GenBank")
     handle = Entrez.efetch(db="nucleotide", id=accession, rettype="gb", retmode="text")
-    print(f"Fetching reference sequence {accession} from genbank")
-    return SeqIO.read(handle, "genbank")
+    try:
+        return SeqIO.read(handle, "genbank")
+    except ValueError:
+        sys.exit(
+            f"\nCould not read a GenBank record for '{accession}'.\n"
+            "Check that the accession exists and includes a version suffix, e.g. AY426531.1\n"
+        )
 
 def get_gff(accession):
     url = f"https://www.ncbi.nlm.nih.gov/sviewer/viewer.cgi?db=nuccore&report=gff3&id={accession}"
@@ -49,28 +71,49 @@ def annotate_sequence(seq, cds):
     seq.features = new_features
     return seq
 
+FORBIDDEN_NAME_CHARS = ' ,.;:()[]'
+
+
 def clean_qualifier(value):
-    """Remove common patterns from qualifier values."""
-    value = re.sub(r'^(protein|protease|protien)[\s_|]*', '', value, flags=re.IGNORECASE)
-    value = re.sub(r'[\s_|]*(protein|protease|protien)$', '', value, flags=re.IGNORECASE)
+    """
+    Strip the boilerplate that GenBank product names tend to carry, so that
+    "VP1 protein" and "3C protease (3C)" come out as "VP1" and "3C".
+    Shorter names make for readable amino acid mutation labels.
+    """
+    # Require a separator around the boilerplate word, so that "VP1 protein"
+    # loses its suffix but "polyprotein" survives intact.
+    value = re.sub(r'^(protein|protease|protien)[\s_|]+', '', value, flags=re.IGNORECASE)
+    value = re.sub(r'[\s_|]+(protein|protease|protien)$', '', value, flags=re.IGNORECASE)
     value = re.sub(r'\s*\([\w\d]+\)\s*$', '', value)
     value = re.sub(r'__\d[A-D]_.*', '', value)
     return value.strip()
 
-def check_name(new_name):
-    forbidden_chars = ' ,.;:()[]'
-    if any([c in new_name for c in forbidden_chars]):
-        print(f"ERROR: the CDS name contains invalid characters '{forbidden_chars}' or spaces.")
-        print("These have been replaced by '_', but you might want to start over with different names.")
-        for c in forbidden_chars:
-            new_name = clean_qualifier(new_name)
 
-    if len(new_name)>20:
-        print(f"WARNING: this CDS name '{new_name}' is long, this might result in cumbersome output")
+def check_name(new_name):
+    """
+    Normalise a CDS name: drop the boilerplate, then replace any character
+    Nextclade and augur cannot handle in a feature name.
+    """
+    new_name = clean_qualifier(new_name)
+
+    if any(c in new_name for c in FORBIDDEN_NAME_CHARS):
+        print(f"WARNING: the CDS name '{new_name}' contains characters that are not allowed "
+              f"in a feature name ('{FORBIDDEN_NAME_CHARS}').")
+        for c in FORBIDDEN_NAME_CHARS:
+            new_name = new_name.replace(c, '_')
+        # Collapse the runs of underscores that e.g. ", " leaves behind.
+        new_name = re.sub(r'_+', '_', new_name).strip('_')
+        print(f"         It has been rewritten as '{new_name}'. Consider choosing a shorter name yourself.")
+
+    if len(new_name) > 20:
+        print(f"WARNING: the CDS name '{new_name}' is long; mutation labels will be unwieldy.")
+
     return new_name
 
 if __name__=="__main__":
     args = parse_args()
+    # Tolerate a trailing slash, so paths in the messages below read cleanly.
+    args.output_dir = args.output_dir.rstrip("/") or "."
     reference = get_reference_sequence(args.reference)
     gff = get_gff(args.reference)
     if not os.path.isdir(args.output_dir):
@@ -214,3 +257,13 @@ if __name__=="__main__":
     print("\nWriting annotation to genbank file: ", gb_fname)
     reannotated_seq = annotate_sequence(reference, streamlined_cds)
     SeqIO.write(reannotated_seq, gb_fname, "genbank")
+
+    print(
+        "\nDone. Two files are ready for the Nextclade dataset:\n"
+        f"  {args.output_dir}/reference.fasta\n"
+        f"  {gff_fname}\n"
+        "\nThe workflow also needs the annotated GenBank file in resources/, where\n"
+        "augur ancestral looks for it:\n"
+        f"  cp {gb_fname} resources/reference.gbk\n"
+        "\nThen make sure the GENES list in the Snakefile matches the CDS names above."
+    )

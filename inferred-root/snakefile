@@ -1,21 +1,115 @@
-# Set the parameters
-REFERENCE_ACCESSION =   "<your virus accession>"
-MIN_DATE =              "1990-01-01" # all sequences before then are excluded
-MIN_LENGTH =            "6000" #TODO: set lower to include shorter fragments
-MAX_SEQS =              "1000" #TODO: set to 10000 for testing
-ID_FIELD=               "accession" # either "accession" or "strain", used for meta-id-column in augur
+"""
+Infer a "Static Inferred Ancestor" for your virus: an ancestral sequence
+reconstructed at the most recent common ancestor of your sequences, obtained by
+rooting a tree on an outgroup of related viruses.
 
-OUTGROUP = ["acc1.1", "acc2.1", "acc3.1"] ##TODO: provide outgroup sequences related to your virus
-# OUTGROUP = REFERENCE_ACCESSION
+The resulting sequence is a more useful anchor for mutation calling than a
+RefSeq that has drifted far from circulating strains.
 
-# Set the paths (make sure they are the same as those in the top-level Snakefile)
-EXCLUDE =               "../resources/exclude.txt"
-SEQUENCES =             "../data/sequences.fasta"
-METADATA =              "../results/metadata.tsv"
-INCLUDE =               "../results/include.txt"
-INFERRED_ANCESTOR =     "resources/inferred-root.fasta"
+Run it from inside this directory with
+
+    snakemake --cores 9 all_sub
+
+or let the top-level Snakefile drive it by setting INFERRENCE_RERUN = True.
+See README.md in this directory for the full picture.
+"""
+
+import glob
+import os
+import sys
+
+# -----------------------------------------------------------------------------
+# Settings
+# -----------------------------------------------------------------------------
+
+REFERENCE_ACCESSION = "<your virus accession>"  # CHANGE ME: must match the top-level Snakefile
+MIN_DATE   = "1990-01-01"   # Drop anything collected before this date
+MIN_LENGTH = "6000"         # Drop sequences shorter than this, in bp
+MAX_SEQS   = "1000"         # Tree size for the inference; 1000 is usually plenty
+ID_FIELD   = "accession"    # Metadata column holding the sequence IDs
+
+# CHANGE ME: accessions of the outgroup, i.e. viruses that are related to yours
+# but definitely sit outside the diversity you are describing. Each one needs a
+# matching FASTA file at resources/outgroup/<accession>.fasta.
+#
+# Pick two or three relatives that are close enough to align against your
+# genomes but clearly distinct. Too distant and the alignment degrades; too
+# close and the root lands inside your own diversity.
+OUTGROUP = ["acc1.1", "acc2.1", "acc3.1"]
+
+# -----------------------------------------------------------------------------
+# Paths
+# -----------------------------------------------------------------------------
+# These point back into the parent directory. Keep them in sync with the
+# top-level Snakefile.
+
+EXCLUDE   = "../resources/exclude.txt"
+SEQUENCES = "../data/sequences.fasta"
+METADATA  = "../results/metadata.tsv"
+INCLUDE   = "../results/include.txt"
+INFERRED_ANCESTOR = "resources/inferred-root.fasta"
+
+# -----------------------------------------------------------------------------
+# Configuration checks
+# -----------------------------------------------------------------------------
+
+def _fail(*lines):
+    sys.exit("\n\nCONFIGURATION ERROR\n" + "\n".join("  " + l for l in lines) + "\n")
+
+
+if "<" in REFERENCE_ACCESSION or ">" in REFERENCE_ACCESSION:
+    _fail(
+        f"REFERENCE_ACCESSION is still the template placeholder ({REFERENCE_ACCESSION!r}).",
+        "Set it to the same accession you used in the top-level Snakefile.",
+    )
+
+if not OUTGROUP:
+    _fail(
+        "OUTGROUP is empty, so there is nothing to root the tree on.",
+        "List at least one related accession, and place its FASTA in resources/outgroup/.",
+    )
+
+# Each outgroup accession needs a FASTA file on disk. Report every missing one
+# at once, so the user does not fix them one run at a time.
+_missing_outgroup = [
+    accession for accession in OUTGROUP
+    if not os.path.exists(f"resources/outgroup/{accession}.fasta")
+]
+if _missing_outgroup:
+    _available = sorted(
+        os.path.basename(f)[:-len(".fasta")]
+        for f in glob.glob("resources/outgroup/*.fasta")
+    )
+    _fail(
+        "Missing outgroup sequences in inferred-root/resources/outgroup/:",
+        *[f"  {a}.fasta" for a in _missing_outgroup],
+        "",
+        "Download each one from NCBI as a FASTA file named after its accession,",
+        "then make sure the OUTGROUP list in this file matches the filenames.",
+        "",
+        ("Currently available: " + ", ".join(_available)) if _available
+        else "The directory currently holds no FASTA files.",
+    )
+
+for _path, _hint in (
+    (SEQUENCES, "sequences from the ingest step"),
+    (METADATA, "curated metadata from the main workflow's curate rule"),
+    (INCLUDE, "include list from the main workflow's add_reference_to_include rule"),
+):
+    if not os.path.exists(_path):
+        _fail(
+            f"Missing {_hint}: {_path}",
+            "This sub-workflow runs on files the main workflow prepares.",
+            "Either run the main workflow with INFERRENCE_RERUN = True, or generate",
+            "these files first from the project root:",
+            f"  snakemake --cores 9 {METADATA.lstrip('./')} {INCLUDE.lstrip('./')}",
+        )
 
 rule all_sub:
+    """
+    Default target: publish the inferred ancestor where the main workflow
+    expects it, at ../resources/inferred-root.fasta.
+    """
     input:
         seqs = INFERRED_ANCESTOR
     shell:
@@ -81,21 +175,30 @@ rule filter:
         """
 
 rule join_fastas:
+    """
+    Combine the subsampled ingroup with the outgroup into the single FASTA that
+    gets aligned and turned into a tree.
+    """
     input:
         outgroup= expand("resources/outgroup/{o}.fasta", o = OUTGROUP),
         ingroup= rules.filter.output.filtered_sequences,
     output: "results/joined.fasta"
-    shell: 
+    shell:
         """
-        cat {input.outgroup} {input.ingroup} > tmp.fasta
-        seqkit rmdup -n tmp.fasta -o {output}
-        rm tmp.fasta
+        set -euo pipefail
+        cat {input.outgroup} {input.ingroup} > {output}.tmp
+        seqkit rmdup -n {output}.tmp -o {output}
+        rm -f {output}.tmp
         """
 
 
 rule align_fastas:
+    """
+    Align ingroup and outgroup together with MAFFT. Nextclade's reference-based
+    alignment is not suitable here, because the outgroup is too divergent from
+    the reference.
+    """
     input: rules.join_fastas.output
-    params: 
     output: "results/aligned.fasta"
     threads: workflow.cores
     shell: "mafft --thread {threads} --auto {input} > {output}"
@@ -119,6 +222,12 @@ rule tree:
         """
 
 rule pick_ancestral_sequence:
+    """
+    Reroot the tree on the outgroup, reconstruct the sequence at the MRCA of the
+    ingroup, and fill any gaps from the reference so the result is a complete
+    genome. Also writes results/nwk_tree_outgroup.png for a visual check that
+    the outgroup really sits at the base of the tree.
+    """
     input:
         tree = rules.tree.output,
         alignment = rules.align_fastas.output,
@@ -139,8 +248,9 @@ rule pick_ancestral_sequence:
         """
 
 rule clean:
+    """Discard the inference results, including the published ancestor."""
     shell:
         """
-        rm ../resources/inferred-root.fasta resources/inferred-root.fasta
-        rm -r results/*
+        rm -rf results
+        rm -f resources/inferred-root.fasta ../resources/inferred-root.fasta
         """

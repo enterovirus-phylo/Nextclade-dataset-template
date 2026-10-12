@@ -1,0 +1,132 @@
+# config_checks.snkm
+# Sanity checks on the workflow configuration.
+#
+# Included by the top-level Snakefile, and evaluated while Snakemake parses the
+# workflow, before any job starts. The point is to fail in seconds with a
+# message that says what to do, rather than an hour into a tree build with a
+# traceback from deep inside augur.
+#
+# These run in the Snakefile's namespace, so they read its parameters
+# (REFERENCE_ACCESSION, GENES, the path variables) and the pathogen.json
+# `config` directly. Add a check here rather than in the Snakefile, and keep
+# each one to the pattern: detect the problem, then say how to fix it.
+
+import os
+import re
+import sys
+
+
+def _fail(*lines):
+    """Abort the workflow with a multi-line, readable message."""
+    sys.exit("\n\nCONFIGURATION ERROR\n" + "\n".join("  " + l for l in lines) + "\n")
+
+
+# Placeholders look like <this> and are left over from the template.
+if "<" in REFERENCE_ACCESSION or ">" in REFERENCE_ACCESSION:
+    _fail(
+        f"REFERENCE_ACCESSION is still the template placeholder ({REFERENCE_ACCESSION!r}).",
+        "Set it to the GenBank accession of your reference near the top of the Snakefile,",
+        'for example: REFERENCE_ACCESSION = "AY426531.1"',
+    )
+
+# pathogen.json carries the same kind of placeholder in its attributes block.
+_placeholder_attrs = [
+    key for key, value in config.get("attributes", {}).items()
+    if isinstance(value, str) and "<" in value
+]
+if _placeholder_attrs:
+    _fail(
+        "dataset/pathogen.json still contains template placeholders in:",
+        ", ".join(_placeholder_attrs),
+        "Fill in the name, reference name and reference accession for your virus.",
+    )
+
+# The reference FASTA and GFF3 are generated in a separate, interactive step.
+for _path, _hint in (
+    (REFERENCE_PATH, "reference FASTA"),
+    (GFF_PATH, "genome annotation"),
+):
+    if not os.path.exists(_path):
+        _fail(
+            f"Missing {_hint}: {_path}",
+            "Generate the reference files first (this asks a few questions):",
+            f'  python3 scripts/generate_from_genbank.py --reference "{REFERENCE_ACCESSION}" --output-dir dataset/',
+            "See section 1 of the README.",
+        )
+
+if not os.path.exists(GENBANK_PATH):
+    _fail(
+        f"Missing annotated reference: {GENBANK_PATH}",
+        "generate_from_genbank.py writes dataset/reference.gbk; copy it into place:",
+        f"  cp dataset/reference.gbk {GENBANK_PATH}",
+        "Then check that its product names match the GENES list in this Snakefile.",
+    )
+
+
+def _genbank_summary(path):
+    """
+    Pull the accession and the CDS names out of a GenBank file, without taking
+    a hard dependency on Biopython just for a config check.
+    """
+    accession, names = None, set()
+    with open(path) as handle:
+        for line in handle:
+            if accession is None and line.startswith("VERSION"):
+                accession = line.split()[1]
+            match = re.search(r'/(?:product|gene|locus_tag)="([^"]+)"', line)
+            if match:
+                names.add(match.group(1))
+    return accession, names
+
+
+_genbank_accession, _genbank_names = _genbank_summary(GENBANK_PATH)
+
+# The template ships an example reference.gbk. Forgetting to replace it is easy
+# and the resulting failure, deep inside augur ancestral, is hard to read.
+if _genbank_accession and _genbank_accession.split(".")[0] != REFERENCE_ACCESSION.split(".")[0]:
+    _fail(
+        f"{GENBANK_PATH} describes {_genbank_accession}, but REFERENCE_ACCESSION is {REFERENCE_ACCESSION}.",
+        "These have to be the same sequence, or the annotation will not match the reference.",
+        "If the GenBank file is the example the template ships with, replace it:",
+        f'  python3 scripts/generate_from_genbank.py --reference "{REFERENCE_ACCESSION}" --output-dir dataset/',
+        f"  cp dataset/reference.gbk {GENBANK_PATH}",
+    )
+
+# augur ancestral matches CDS by name, so catch a mismatch now rather than
+# after the tree has been built.
+_missing_genes = [gene for gene in GENES if gene not in _genbank_names]
+if _missing_genes:
+    _fail(
+        f"These names from GENES are not annotated in {GENBANK_PATH}:",
+        "  " + ", ".join(_missing_genes),
+        "",
+        "augur ancestral matches CDS by name, so they have to agree exactly.",
+        "Names available in the GenBank file:",
+        "  " + (", ".join(sorted(_genbank_names)) if _genbank_names else "(none found)"),
+        "",
+        "Either correct the GENES list, or regenerate the reference files and pick",
+        "clearer CDS names. See step 1 of the README.",
+    )
+
+# Rooting on the inferred ancestor only works if that ancestor exists.
+if STATIC_ANCESTRAL_INFERRENCE and not INFERRENCE_RERUN and not os.path.exists(INFERRED_ANCESTOR):
+    _fail(
+        f"Missing inferred ancestral root: {INFERRED_ANCESTOR}",
+        "The template does not ship one, so the first build has to compute it.",
+        "Either generate it by setting INFERRENCE_RERUN = True in this Snakefile and running",
+        "  snakemake --cores 9 all --config static_inference_confirmed=true",
+        'or skip the feature with STATIC_ANCESTRAL_INFERRENCE = False and ROOTING = "mid_point".',
+    )
+
+if ROOTING == "ancestral_sequence" and not STATIC_ANCESTRAL_INFERRENCE:
+    _fail(
+        'ROOTING = "ancestral_sequence" needs STATIC_ANCESTRAL_INFERRENCE = True,',
+        "because the ancestral sequence is only added to the alignment in that case.",
+        'Pick a different root, for example ROOTING = "mid_point".',
+    )
+
+if not GENES:
+    _fail(
+        "GENES is empty, so augur ancestral has nothing to translate.",
+        "List the CDS names from your annotation, e.g. GENES = [\"VP1\", \"2A\"]",
+    )

@@ -1,5 +1,11 @@
-# workflow_messages.snkm
-# Handles workflow lifecycle messages and user confirmations.
+# Workflow lifecycle messages.
+#
+# Regenerating the ancestral root is destructive and slow, so it asks for an
+# explicit confirmation before any work starts. Everything here is presentation
+# only; no rule depends on it.
+
+import sys
+
 
 onstart:
     if INFERRENCE_RERUN and not config.get("static_inference_confirmed", False):
@@ -18,19 +24,33 @@ onstart:
         ║                                                              ║
         ║  Otherwise, set INFERRENCE_RERUN = False to skip inference.  ║
         ╚══════════════════════════════════════════════════════════════╝
-        """)
-        sys.exit("Root inference requires confirmation. See message above.")
+""")
+        sys.exit("Root inference needs confirmation; see the message above.")
+
 
 onsuccess:
     if INFERRENCE_RERUN:
         print(f"""
-        Enterovirus root inference completed successfully!
-        Updated files:
-           • {INFERRED_ANCESTOR} (ancestral sequence)
-           • {INFERRED_META_PATH} (merged metadata)
-           • {INFERRED_SEQ_PATH} (combined sequences with ancestral root)
-        """)
-    else: print("Workflow finished; ancestral root sequence was unchanged.")
+Ancestral root inference finished. Updated:
+
+  {INFERRED_ANCESTOR}      the inferred ancestral sequence
+  {INFERRED_SEQ_PATH}      sequences with the ancestor appended
+  {INFERRED_META_PATH}     metadata with the ancestor appended
+
+Two things worth doing now:
+  - open inferred-root/results/nwk_tree_outgroup.png and check that the
+    outgroup sits at the base of the tree
+  - set INFERRENCE_RERUN = False again, so later runs reuse this root
+""")
+    elif STATIC_ANCESTRAL_INFERRENCE:
+        print("\nBuild finished. dataset.zip is ready; the existing ancestral root was reused.\n")
+    else:
+        print("\nBuild finished. dataset.zip is ready.\n")
+
 
 onerror:
-    print("An error occurred. See detailed error message in the terminal.")
+    print("""
+The workflow failed. Scroll up for the first error: Snakemake reports the
+failing rule and the log file for it, which is usually more informative than
+the summary at the bottom.
+""")

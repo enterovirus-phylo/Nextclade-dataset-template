@@ -1,214 +1,295 @@
-# Nextclade Workflow for &lt;your virus&gt;
+# Nextclade dataset template
 
-This repository contains a robust, reproducible workflow for building a custom [Nextclade](https://github.com/nextstrain/nextclade) dataset for &lt;your virus&gt;. It enables you to generate reference and annotation files, download and process sequence data, infer an ancestral sequence, and create all files needed for Nextclade analyses and visualization.
+A Snakemake workflow for building a [Nextclade](https://github.com/nextstrain/nextclade)
+dataset for a virus of your choice. It downloads sequences from NCBI, curates
+the metadata, builds a reference tree, and packages everything Nextclade needs
+into a single `dataset.zip`.
+
+The template ships with picornavirus defaults, because that is what it grew out
+of, but nothing in it is enterovirus-specific. Every value you need to change is
+marked `CHANGE ME` in the `Snakefile`.
+
+> [!NOTE]
+> If you're not familiar with Nextclade, please read its [documentation](https://docs.nextstrain.org/projects/nextclade/en/stable/) first.
 
 ---
-## Quick Start
+
+## Contents
+
+- [What you get](#what-you-get)
+- [Prerequisites](#prerequisites)
+- [Setup, step by step](#setup-step-by-step)
+- [Running the workflow](#running-the-workflow)
+- [Looking at the result](#looking-at-the-result)
+- [Sub-workflows](#sub-workflows)
+- [Configuration reference](#configuration-reference)
+- [Troubleshooting](#troubleshooting)
+- [Releasing a dataset](#releasing-a-dataset)
+- [Authors and citation](#authors-and-citation)
+
+---
+
+## What you get
+
+Running the workflow produces:
+
+| Output | What it is |
+|---|---|
+| `dataset.zip` | The packaged Nextclade dataset.  |
+| `out-dataset/` | The same files unpacked (used to serve locally to test in Nextclade Web) |
+| `results/auspice.json` | The reference tree. Drag it onto [auspice.us](https://auspice.us) to inspect the build. |
+| `results/example_sequences.fasta` | A handful of sequences shipped with the dataset as the "Load example" button. |
+
+A Nextclade dataset is a reference sequence, its annotation, a reference tree,
+clade definitions and a set of QC rules. Nextclade places new sequences onto
+that tree, calls their mutations and assigns them a clade. The
+[Nextclade documentation](https://docs.nextstrain.org/projects/nextclade/en/stable/user/datasets.html)
+explains the format in detail.
+
+---
+
+## Prerequisites
+
+### Software
+
+Everything comes from conda-forge and bioconda. `environment.yml` in the project
+root lists all of it — create the environment from that file:
 
 ```bash
-# 1. Set up folders
-mkdir -p dataset data ingest resources results scripts
+conda env create -f environment.yml
+conda activate nextclade
+```
 
-# 2. Generate reference files
+If the environment already exists and the file has changed since, update it with
+`conda env update -f environment.yml --prune`. Micromamba works as a replacement (`micromamba env create -f environment.yml`).
+
+### An email address for NCBI
+
+NCBI asks automated downloads to identify themselves, and throttles those that
+do not. Put your email address in a `.env` file in the project root:
+
+```bash
+echo "EMAIL=you@example.org" > .env
+```
+
+`.gitignore` already keeps `.env` out of version control.
+
+### Things to know before you start
+
+You will need, for your virus:
+
+- the **NCBI taxon id** — look it up in the [NCBI Taxonomy browser](https://www.ncbi.nlm.nih.gov/taxonomy);
+- a **reference accession**, ideally the RefSeq entry, with its version suffix (e.g. `AY426531.1`);
+- a rough idea of your **genome length**, to set a sensible minimum sequence length;
+- optionally, a **clade nomenclature** and the mutations that define each clade. You can build a
+  dataset without this and add clades later.
+
+---
+
+## Setup, step by step
+
+### 1. Generate the reference files
+
+Nextclade needs the reference as a FASTA file and its annotation as GFF3. This
+script fetches both from GenBank and helps you tidy up the CDS names:
+
+```bash
 python3 scripts/generate_from_genbank.py --reference "<accession>" --output-dir dataset/
+```
 
-# 3. Configure pathogen.json (edit manually)
+The script asks a few questions while it runs. When a genome is annotated both as a whole CDS and as mature peptides, the mature peptides are usually the more
+useful choice (`mature_protein [2]`); otherwise pick `on a case-by-case basis [0]` and then `[product]` or `[leave empty for manual choice]` to choose the
+features yourself. The right answers depend on how the reference is annotated.
 
-# 4. If first time, enable inference in Snakefile:
-# Set INFERRENCE_RERUN = True
+CDS names end up as labels on amino acid mutations, so keep them short and recognisable — `VP1`, not `VP1_capsid_protein_precursor`. The script strips
+boilerplate like a trailing "protein" and replaces characters that augur and Nextclade cannot handle, warning you when it does.
 
-# 5. Run workflow
+This writes three files:
+
+- `dataset/reference.fasta` — the reference sequence
+- `dataset/genome_annotation.gff3` — the annotation
+- `dataset/reference.gbk` — the annotation in GenBank format
+
+Copy the last one into `resources/`, where `augur ancestral` looks for it:
+
+```bash
+cp dataset/reference.gbk resources/reference.gbk
+```
+
+> [!IMPORTANT]
+> The CDS names must match **exactly** in three places: the `Name` attributes in
+> `dataset/genome_annotation.gff3`, the `product` qualifiers in
+> `resources/reference.gbk`, and the `GENES` list in the `Snakefile`. A mismatch
+> makes `augur ancestral` fail, because it cannot line the features up.
+>
+> Check them with:
+> ```bash
+> grep -o 'Name=[^;]*' dataset/genome_annotation.gff3 | sort -u
+> grep '/product=' resources/reference.gbk | sort -u
+> ```
+
+### 2. Tell the ingest workflow which virus to download
+
+Edit [`ingest/config/config.yaml`](ingest/config/config.yaml):
+
+```yaml
+ncbi_taxon_id: 42789          # your virus, from the NCBI Taxonomy browser
+entrez_search_term: "your virus name"
+```
+
+Only `ncbi_taxon_id` matters for the default download route.
+
+### 3. Describe your dataset in `pathogen.json`
+
+Edit [`dataset/pathogen.json`](dataset/pathogen.json). At a minimum, fill in the
+`attributes` block:
+
+```json
+"attributes": {
+  "name": "Enterovirus D68",
+  "reference name": "Fermon",
+  "reference accession": "AY426531.1"
+}
+```
+
+The rest of the file controls alignment and quality control. The defaults are
+reasonable for a ~7.5 kb picornavirus; for a genome of a different size, scale
+`qc.missingData.missingDataThreshold` and `qc.privateMutations.typical`/`cutoff`
+accordingly. The
+[pathogen config reference](https://docs.nextstrain.org/projects/nextclade/en/latest/user/input-files/05-pathogen-config.html)
+documents every field.
+
+> [!WARNING]
+> QC only runs for the checks you enable here. If you drop the `qc` block,
+> Nextclade will not check your sequences for quality issues.
+
+### 4. Set the workflow parameters
+
+Open the [`Snakefile`](Snakefile) and work through the blocks at the top.
+
+```python
+REFERENCE_ACCESSION = "AY426531.1"
+```
+
+Then sanity-check the filtering thresholds, especially `MIN_LENGTH` (the default
+`6000` assumes a picornavirus-sized genome and will discard everything for a
+smaller virus). See the [configuration reference](#configuration-reference) below.
+
+### 5. Decide how to root the tree
+
+For many Enteroviruses the official reference sequence was deposited decades ago and sits a long way from anything circulating today. Mutations called against it are numerous and not very informative. As an alternative, the workflow can root the
+tree on a **Static Inferred Ancestor**: a sequence reconstructed from the most
+recent common ancestor of your own sequences, obtained by rooting a tree on an
+outgroup of related viruses. Nextclade can then report mutations relative to
+that ancestor instead of the distant reference.
+
+The template does not ship such an ancestor, so you have to choose:
+
+**Option A — use the inferred ancestor (recommended).** Requires a bit of setup:
+you need outgroup sequences. Follow
+[`inferred-root/README.md`](inferred-root/README.md), then set in the `Snakefile`:
+
+```python
+STATIC_ANCESTRAL_INFERRENCE = True
+INFERRENCE_RERUN = True          # only for the first build
+ROOTING = "ancestral_sequence"
+```
+
+**Option B — skip it for now.** Gets you a working dataset immediately, and you
+can switch to Option A later:
+
+```python
+STATIC_ANCESTRAL_INFERRENCE = False
+ROOTING = "mid_point"
+```
+
+---
+
+## Running the workflow
+
+```bash
+snakemake --cores 9 all
+```
+
+Adjust `--cores` to your machine. Tree building dominates the runtime; expect
+tens of minutes to a few hours depending on `MAX_SEQS`.
+
+Before committing to a full run, check what Snakemake intends to do:
+
+```bash
+snakemake --cores 9 all --dry-run
+```
+
+The workflow validates its configuration while parsing, so mistakes surface in
+seconds rather than after an hour of tree building.
+
+### The first run, with root inference
+
+If you chose Option A above, the first build has to compute the ancestor. That
+is destructive and slow, so it asks for confirmation:
+
+```bash
 snakemake --cores 9 all --config static_inference_confirmed=true
 ```
 
-See detailed instructions below for each step.
+Afterwards set `INFERRENCE_RERUN = False`, so later runs reuse the ancestor in
+`resources/inferred-root.fasta`. Commit that file: it is what lets someone else
+reproduce your dataset without rerunning the inference.
 
----
+### Adding clade labels
 
-## Folder Structure
+Clades are defined in [`resources/clades.tsv`](resources/clades.tsv): one row per
+clade, listing the mutations that are unique to it. The template ships it empty,
+so fill it in once you have done an initial run and can see the tree. Until it
+holds real definitions, every mutation Nextclade finds in a query sequence counts
+as private; afterwards, Nextclade can tell clade-defining mutations apart from
+genuinely private ones.
 
-Follow the [Nextclade example workflow](https://github.com/nextstrain/nextclade_data/tree/master/docs/example-workflow) or use the structure below:
-
-```bash
-mkdir -p dataset data ingest resources results scripts
-```
-
----
-
-## Workflow Overview
-
-This workflow is composed of several modular steps:
-
-1. **Reference Generation**  
-   Extracts relevant reference and annotation files from GenBank.
-2. **Dataset Ingest**  
-   Downloads and processes sequences and metadata from NCBI Virus.
-3. **Inferred Ancestral Root (Recommended)**  
-   Uses outgroup rooting to infer a dataset-specific ancestral sequence. This is rooted on a *Static Inferred Ancestor* — a phylogenetically reconstructed sequence at the MRCA (most recent common ancestor) of the ingroup, which provides a stable, biologically accurate reference point for mutation and clade assignments. This approach addresses the issue that the Reference differs substantially from currently circulating strains.
-4. **Augur Phylogenetics & Nextclade Preparation**  
-   Builds trees rooted on the inferred ancestor, prepares multiple sequence alignments, and generates all files required for Nextclade and Auspice.
-5. **Visualization & Analysis**  
-   Enables both command-line and web-based Nextclade analyses, including local dataset hosting.
-
----
-
-## Setup Instructions
-
-### 1. Generate Reference Files
-
-Run the script to extract the reference FASTA and genome annotation from GenBank:
+After building the dataset, run:
 
 ```bash
-python3 scripts/generate_from_genbank.py --reference "<accession>" --output-dir dataset/
+snakemake --cores 9 mutLabels
 ```
 
-During the script execution, follow the prompts for CDS annotation selection.
-   - `[0]`
-   - `[product]` or `[leave empty for manual choice]` to select proteins.
-   - `[2]`.
+The rule writes the labels into the dataset's `pathogen.json`. Use
+`clades_high_threshold` in the `mutLabels` rule to control how specific a mutation
+must be to a clade before it is labelled — raise it to label only your main
+clades, lower it to include finer ones. Mutations that fall just short of the
+threshold are collected in `results/newly_relevant_mutations.tsv` for you to
+review.
 
-**Outputs:**
-- `dataset/reference.fasta`
-- `dataset/genome_annotation.gff3`
-
----
-
-### 2. Configure `pathogen.json`
-
-Edit `pathogen.json` to:
-- Reference your generated files (`reference.fasta`, `genome_annotation.gff3`)
-- Update metadata and QC settings as needed  
-> [!WARNING]  
-> If QC is not set, Nextclade will skip quality checks.
-
-See the [Nextclade pathogen config documentation](https://docs.nextstrain.org/projects/nextclade/en/latest/user/input-files/05-pathogen-config.html) for details.
-
----
-
-### 3. Prepare GenBank Reference
-
-Copy your GenBank file to `resources/reference.gb` and edit it to ensure compatibility with the workflow.
-
-**Important requirements:**
-- Each coding sequence (CDS) must have either a `product` or `gene` name present
-- The annotation keys must **match exactly** between `reference.gb` and `genome_annotation.gff3`
-- Use simple, consistent names (e.g., `product="VP1"` instead of `product="VP1_protein"`)
-- Remove any genes that are not relevant for your dataset
-
-> [!WARNING]  
-> Mismatched or inconsistent gene names will cause `augur ancestral` to fail, as it cannot match features across files. Ensure your protein names match those defined in the `GENES` list in the [Snakefile](/Snakefile#L4).
-
----
-
-### 4. Update the `Snakefile`
-
-- Adjust the workflow parameters and file paths as needed for your dataset.
-- Ensure required files are available:
-  - `data/sequences.fasta`
-  - `data/metadata.tsv`
-  - `resources/auspice_config.json`
-
-Sequences and metadata can be downloaded automatically via the ingest process (see below).
-
----
-
-## Subprocesses
-
-### Ingest
-
-Automates downloading of &lt;your viral&gt; sequences and metadata from NCBI Virus.  
-See [ingest/README.md](ingest/README.md) for specifics.
-
-**Required packages:**  
-`csvtk, nextclade, tsv-utils, seqkit, zip, unzip, entrez-direct, ncbi-datasets-cli` (installable via conda-forge/bioconda)
-
----
-
-### Inferred Ancestral Root with Outgroup Rooting (Recommended)
-
-The `inferred-root/` directory contains a reproducible pipeline that uses **outgroup rooting** to infer a dataset-specific ancestral sequence for &lt;your virus&gt;. This method:
-
-- **Builds a phylogenetic tree** including both &lt;your viral&gt; sequences (ingroup) and related enterovirus sequences (outgroup)
-- **Roots the tree on the outgroup** to establish correct evolutionary directionality
-- **Extracts the ancestral sequence** at the MRCA of all &lt;your viral&gt; sequences
-- **Fills gaps** with reference nucleotides to ensure a complete, biologically plausible genome
-
-This **Static Inferred Ancestor** serves as the root of your Nextclade dataset, providing:
-- More accurate mutation calls relative to a realistic &lt;your virus&gt; ancestor
-- A stable reference that better represents &lt;your viral&gt; diversity than the distant Reference sequence 
-
-#### Configuration
-
-The workflow has two key parameters in the main `Snakefile`:
-- `STATIC_ANCESTRAL_INFERRENCE = True` — enables using the inferred root (default: `True`)
-- `INFERRENCE_RERUN = False` — controls whether to regenerate the inferred root (default: `False`)
-
-#### For Regular Dataset Builds
-
-Use the existing inferred root:
+### Starting over
 
 ```bash
-snakemake --cores 9 all
+snakemake --cores 1 clean
 ```
 
-#### To Regenerate the Inferred Root
-
-When you need to regenerate with new data or updated outgroups:
-
-1. Set `INFERRENCE_RERUN = True` in the Snakefile
-2. Run the workflow:
-   ```bash
-   snakemake --cores 9 all --config static_inference_confirmed=true
-   ```
-3. The workflow will:
-   - Clean previous results in `inferred-root/results/`
-   - Run the full inference pipeline with your current sequences
-   - Generate a new `resources/inferred-root.fasta`
-   - Incorporate it into the dataset build
-4. After successful regeneration, set `INFERRENCE_RERUN = False` for future runs
-
-> [!WARNING]  
-> Setting `INFERRENCE_RERUN = True` will **overwrite** your existing `resources/inferred-root.fasta` file and clear `inferred-root/results/`. Only use this when you want to regenerate the root with updated data.
-
-> [!NOTE]  
-> - **First-time users:** If `resources/inferred-root.fasta` doesn't exist, you must set `INFERRENCE_RERUN = True` initially.
-> - **To disable this feature:** Set `STATIC_ANCESTRAL_INFERRENCE = False` and change `ROOTING` parameter (e.g., `ROOTING="mid_point"`).
-> - **Outgroup configuration:** Sequences are in `resources/outgroup/`; update the `OUTGROUP` list in `inferred-root/Snakefile` to modify which species are used.
-
-**See:** [`inferred-root/README.md`](inferred-root/README.md) for technical details and the complete workflow.
+This removes `results/`, `out-dataset/`, `dataset.zip` and the downloaded data.
+It deliberately leaves `resources/inferred-root.fasta` alone, since recomputing
+the ancestor is a separate decision.
 
 ---
 
-## Running the Workflow
+## Looking at the result
 
-To generate the Auspice JSON and Nextclade dataset:
+### The reference tree
+
+Drag `results/auspice.json` onto [auspice.us](https://auspice.us). This is the
+quickest way to spot problems: sequences on implausibly long branches are
+usually misannotated or poor quality. Add their accessions to
+`resources/exclude.txt` and rerun.
+
+Alternatively, view the tree locally:
 
 ```bash
-snakemake --cores 9 all
+auspice view --datasetDir results
 ```
 
-This will use the existing inferred root (see [Inferred Ancestral Root](#inferred-ancestral-root-with-outgroup-rooting-recommended) section above for regeneration instructions).
+What Auspice displays — colourings and filters — is controlled by [auspice_config.json](resources/auspice_config.json). Further configuration options are described in the [Nextclade reference-tree documentation](https://docs.nextstrain.org/projects/nextclade/en/stable/user/input-files/04-reference-tree.html).
 
-The workflow will:
-- Build the reference tree rooted on the inferred ancestor
-- Produce the Nextclade dataset in `out-dataset/`
-- Run Nextclade on example sequences
-- Output results to `test_out/` (alignment, translations, summary TSV)
+### The dataset in Nextclade Web
 
-**Key Snakefile parameters:**
-- `ROOTING = "ancestral_sequence"` — roots tree on the inferred ancestor
-- `STATIC_ANCESTRAL_INFERRENCE = True` — enables inferred root in the dataset (default)
-- `INFERRENCE_RERUN = False` — set to `True` only when regenerating the root (default: `False`)
-
-### Labeling Mutations of Interest
-
-To label mutations of interest, execute the `mutLabels` rule as a standalone instance. They will be added to the `out-dataset/pathogen.json` file.
-
----
-
-## Visualizing Your Custom Nextclade Dataset
-
-To use the dataset in Nextclade Web, serve it locally:
+Serve `out-dataset/` locally and point Nextclade at it:
 
 ```bash
 serve --cors out-dataset -l 3000
@@ -216,62 +297,166 @@ serve --cors out-dataset -l 3000
 
 Then open:
 
-```
+```text
 https://master.clades.nextstrain.org/?dataset-url=http://localhost:3000
 ```
 
-- Click "Load example", then "Run"
-- You may want to reduce "Max. nucleotide markers" to 500 under "Settings" → "Sequence view" to optimize performance
+Click **Load example**, then **Run**. With a large tree, reducing
+*Settings → Sequence view → Max. nucleotide markers* to 500 keeps the interface
+responsive.
 
+### The dataset in the Nextclade CLI
 
-## Test / validation (`rule test`)
-
-The workflow includes a Snakemake `rule test` which builds a **mixed test set** (real sequences + generated edge cases) and runs **Nextclade CLI** against the newly assembled dataset. This is intended as a quick regression check when you change QC rules or alignment parameters.
-
-### Run
 ```bash
-snakemake --cores 9 test
+nextclade3 run \
+    --input-dataset dataset.zip \
+    --output-all test_out/ \
+    results/example_sequences.fasta
 ```
 
-### What it does
-- Creates synthetic test inputs (fragments + recombinants) with:
-  - `scripts/generate_test_sequences.py`
-- Combines:
-  - dataset sequences (`data/sequences.fasta`)
-  - example sequences included in the dataset
-  - generated fragments + recombinants
-  - negative controls in `testing/` (e.g. `testing/non-EV-A_sequence.fasta`)
-  - optional EV-A background sequences (`testing/EV_A.fasta`, or fetched from NCBI if missing)
-- Runs `nextclade3 run` using the freshly built `dataset.zip`
-- Parses the Nextclade run log and outputs summaries / failed sequences using:
-  - `scripts/parse_nextclade_log.py`
-
-### Outputs
-All outputs are written to `test_out/` (Nextclade outputs + aggregated test FASTAs, logs, and any derived summaries).
-The Nextclade CLI log is saved to `testing/test.log`.
-
+`test_out/nextclade.tsv` then holds one row per sequence, with clade
+assignments, QC verdicts and mutation calls. This is the check worth running
+before any release: see [`Nextclade_Dataset_Checklist.md`](Nextclade_Dataset_Checklist.md)
+for what else to test, and [`nextclade_cli.md`](nextclade_cli.md) for the full
+CLI reference.
 
 ---
 
-## Author & Contact
+## Sub-workflows
 
-- Maintainers: Nadia Neuner-Jehle, Alejandra González-Sánchez and Emma B. Hodcroft ([eve-lab.org](https://eve-lab.org/))
-- For questions or suggestions, please [open an issue](https://github.com/enterovirus-phylo/dataset-template-inferred-root/issues) or email: eve-group[at]swisstph.ch
+### `ingest/` — getting the data
 
-### Citation
+Downloads sequences and metadata for your taxon from NCBI, normalises dates and
+place names, and writes `data/sequences.fasta` and `data/metadata.tsv`. The main
+workflow calls it for you while `FETCH_SEQUENCES = True`.
 
-If you use this template in your research, please cite:
+To supply your own data instead, set `FETCH_SEQUENCES = False` and put the two
+files in `data/` yourself. The metadata needs at least `accession`, `strain`,
+`date`, `country` and `region` columns.
 
-> Neuner-Jehle, N., González Sánchez, A., Hodcroft, E. B., & European Non-Polio Enterovirus Network (ENPEN). (2025). *enterovirus-phylo/nextclade_d68: Enterovirus D68 Nextclade Dataset v1.0.0* (v1.0.0--2025-11-18). Zenodo. https://doi.org/10.5281/zenodo.17642338
+See [`ingest/README.md`](ingest/README.md).
+
+### `inferred-root/` — reconstructing the ancestor
+
+Builds a tree of your sequences plus an outgroup, roots it on the outgroup, and
+reconstructs the sequence at the MRCA of your sequences. Run by the main
+workflow when `INFERRENCE_RERUN = True`.
+
+See [`inferred-root/README.md`](inferred-root/README.md).
+
+---
+
+## Configuration reference
+
+All of these live at the top of the [`Snakefile`](Snakefile).
+
+### Required
+
+| Parameter | Description |
+|---|---|
+| `REFERENCE_ACCESSION` | GenBank accession of your reference, with version suffix. |
+| `GENES` | CDS names to translate. Must match your annotation and GenBank file exactly. |
+
+### Filtering and subsampling
+
+| Parameter | Default | Description |
+|---|---|---|
+| `MIN_DATE` | `"1960-01-01"` | Drop sequences collected earlier. `""` disables. |
+| `MIN_LENGTH` | `"6000"` | Drop shorter sequences. Scale to your genome; `""` disables. |
+| `MAX_SEQS` | `"10000"` | Upper bound on tree size. Lower it for a faster build. |
+| `ALLOWED_DIVERGENCE` | `"3000"` | Substitution count above which a sequence is treated as an outlier and excluded automatically. Lower it once you know what normal looks like for your virus. |
+| `ROOTING` | `"ancestral_sequence"` | Tree root: `"ancestral_sequence"`, `"mid_point"`, `"outgroup"`, or an accession. |
+| `ID_FIELD` | `"accession"` | Metadata column holding sequence IDs: `"accession"` or `"strain"`. |
+
+### Switches
+
+| Parameter | Default | Description |
+|---|---|---|
+| `FETCH_SEQUENCES` | `True` | Download data via `ingest/`. Set `False` to supply your own. |
+| `STATIC_ANCESTRAL_INFERRENCE` | `True` | Include the inferred ancestor in the tree. |
+| `INFERRENCE_RERUN` | `False` | Recompute the ancestor. Needed for the first build; slow and destructive. |
+
+### Files you will edit
+
+| File | Purpose |
+|---|---|
+| `dataset/pathogen.json` | Dataset attributes, alignment parameters, QC thresholds. |
+| `dataset/README.md` | Description shown to users in Nextclade. |
+| `dataset/CHANGELOG.md` | Release history. |
+| `resources/clades.tsv` | Clade-defining mutations, one per row. |
+| `resources/exclude.txt` | Accessions to keep out of the tree. |
+| `resources/include.txt` | Accessions that must survive subsampling. |
+| `resources/include_examples.txt` | Accessions to force into the example set. |
+| `resources/accession_strain.tsv` | Corrected strain names, where NCBI's are wrong. |
+| `resources/auspice_config.json` | Tree display: colourings, filters, reference nodes. |
+
+---
+
+## Troubleshooting
+
+**`CONFIGURATION ERROR: REFERENCE_ACCESSION is still the template placeholder`**
+Work through [Setup](#setup-step-by-step). The workflow checks its configuration
+up front rather than failing deep into a run; the message names what to fix.
+
+**`Missing reference FASTA: dataset/reference.fasta`**
+Run `scripts/generate_from_genbank.py` — step 1 of the setup.
+
+**`Missing inferred ancestral root: resources/inferred-root.fasta`**
+Nothing has computed the ancestor yet. Either set `INFERRENCE_RERUN = True` and
+confirm the run, or take Option B in [step 5](#5-decide-how-to-root-the-tree).
+
+**`augur ancestral` fails on a missing feature**
+The CDS names disagree between `GENES`, the GFF3 and the GenBank file. Compare
+them with the `grep` commands in [step 1](#1-generate-the-reference-files).
+
+**`augur filter` returns no sequences**
+Usually `MIN_LENGTH` is longer than your genome, or `MIN_DATE` postdates your
+sequences. Check what you actually downloaded:
+
+```bash
+seqkit stats data/sequences.fasta
+cut -f1,4 data/metadata.tsv | head
+```
+
+**The tree is dominated by one long branch**
+One or a few bad sequences. Find them in `results/outliers.txt`, or open
+`results/auspice.json` on auspice.us, and add the accessions to
+`resources/exclude.txt`.
+
+**`nextclade3: command not found`**
+See [Prerequisites](#prerequisites) for the symlink.
+
+**Snakemake says the directory is locked**
+A previous run was interrupted. `snakemake --unlock` clears it.
+
+Still stuck? [Open an issue](https://github.com/enterovirus-phylo/dataset-template-inferred-root/issues),
+or check the [Nextclade documentation](https://docs.nextstrain.org/projects/nextclade/en/stable/index.html).
+
+---
+
+## Releasing a dataset
+
+[`Nextclade_Dataset_Checklist.md`](Nextclade_Dataset_Checklist.md) walks through
+what to verify before publishing, and how to submit a dataset to
+[`nextclade_data`](https://github.com/nextstrain/nextclade_data) so it appears in
+the Nextclade dataset list.
+
+---
+
+## Authors and citation
+
+Maintainers: Nadia Neuner-Jehle, Alejandra González-Sánchez and Emma B. Hodcroft
+([eve-lab.org](https://eve-lab.org/)).
+
+Questions and suggestions are welcome as
+[issues](https://github.com/enterovirus-phylo/dataset-template-inferred-root/issues),
+or by email to <eve-group@swisstph.ch>.
+
+If you use this template, we would appreciate a citation:
+
+> Neuner-Jehle, N., González Sánchez, A., Hodcroft, E. B., & European Non-Polio
+> Enterovirus Network (ENPEN). (2025). *enterovirus-phylo/nextclade_d68:
+> Enterovirus D68 Nextclade Dataset v1.0.0* (v1.0.0--2025-11-18). Zenodo.
+> https://doi.org/10.5281/zenodo.17642338
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17642338.svg)](https://doi.org/10.5281/zenodo.17642338)
-
-## Troubleshooting and Further Help
-
-- For issues, see the [official Nextclade documentation](https://docs.nextstrain.org/projects/nextclade/en/stable/index.html#) or [open an issue](https://github.com/enterovirus-phylo/dataset-template-inferred-root/issues).
-- For details on the inferred root workflow, see [`inferred-root/README.md`](inferred-root/README.md).
-
-
----
-
-This template provides a scalable, transparent workflow for building and maintaining high-quality Nextclade datasets for Enteroviruses — adaptable to other Enterovirus species as well.

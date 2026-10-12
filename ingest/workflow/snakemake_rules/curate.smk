@@ -36,7 +36,7 @@ rule concat_geolocation_rules:
         all_geolocation_rules="data/all-geolocation-rules.tsv",
     shell:
         """
-        cat {input.general_geolocation_rules} {input.local_geolocation_rules} >> {output.all_geolocation_rules}
+        cat {input.general_geolocation_rules} {input.local_geolocation_rules} > {output.all_geolocation_rules}
         """
 
 

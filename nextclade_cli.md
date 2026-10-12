@@ -1,11 +1,9 @@
 # Reference
 
-
 This document contains the automatically generated reference documentation for command-line arguments of the latest version of Nextclade CLI.
 
 If you have Nextclade CLI installed, you can type `nextclade --help` to read the latest documentation for your installed version of Nextclade.
   
-
 **Command Overview:**
 
 * [`nextclade`↴](#nextclade)
@@ -158,13 +156,6 @@ For short help type: `nextclade -h`, for extended help type: `nextclade --help`.
 
    Supports the following compression formats: "gz", "bz2", "xz", "zstd". Use "-" to read uncompressed data from standard input (stdin).
 * `--server <SERVER>` — Use custom dataset server
-
-
-
-
-
-
-
 
 * `-O`, `--output-all <OUTPUT_ALL>` — Produce all of the output files into this directory, using default basename and predefined suffixes and extensions. This is equivalent to specifying each of the individual `--output-*` flags. Convenient when you want to receive all or most of output files into the same directory and don't care about their filenames.
 

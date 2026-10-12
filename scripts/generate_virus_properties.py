@@ -1,20 +1,18 @@
 ## adapted from https://github.com/neherlab/nextclade_data_workflows/blob/v3-sc2/sars-cov-2/scripts/generate_virus_properties.py
 import json
 from collections import defaultdict
-from os import rename
 import pandas as pd
 from tqdm import tqdm
-import os
 import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Annotate sequences using a genbank reference')
     parser.add_argument('--clade_meta', required=True, type=str, help='Metadata with clade and substitutions')
     parser.add_argument('--properties', required=True, type=str, help='Path to output virus properties JSON file')
-    parser.add_argument('--min-prop', required=True, type=float, default=0.2, help='minimum proportion of sequences in a clade that must have a mutation for it to be considered relevant')
-    parser.add_argument('--high-min-prop', required=True, type=float, default=0.7, help='minimum proportion for clades with high threshold')
-    parser.add_argument('--high-prop-clades', required=True, type=str,nargs="+",  help='list of clades that should use the high proportion threshold')
-    parser.add_argument('--exclude-clades', required=True, type=str, nargs="+", default="unassigned", help='list of clades to drop from mutation list')
+    parser.add_argument('--min-prop', required=True, type=float, help='minimum proportion of sequences in a clade that must carry a mutation for it to be labelled')
+    parser.add_argument('--high-min-prop', required=True, type=float, help='stricter minimum proportion, applied to the clades named by --high-prop-clades')
+    parser.add_argument('--high-prop-clades', required=True, type=str, nargs="+", help='space-separated clades that use the stricter threshold (pass unquoted, e.g. --high-prop-clades A B C)')
+    parser.add_argument('--exclude-clades', required=True, type=str, nargs="+", help='space-separated clades to drop before counting mutations (pass unquoted)')
     parser.add_argument('--newly-relevant-output', required=False, type=str, help='Path to output newly relevant mutations TSV file')
     return parser.parse_args()
 
@@ -34,6 +32,11 @@ def aggregate_mutations(series) -> defaultdict(int):
         mutations = accumulate_mutations(mutations, row)
     return mutations
 
+def flatten_clade_list(values):
+    """Split any whitespace-joined clade names into individual names."""
+    return [name for value in values for name in value.split()]
+
+
 def reverse_a_dict(dict_of_lists):
     result = {}
     for k, v in dict_of_lists.items():
@@ -47,9 +50,12 @@ def main():
 
     # Defines minimum proportions and counts for relevant mutations to keep
     MIN_PROPORTION = args.min_prop
-    clades_with_high_proportion_threshold = args.high_prop_clades
-    clades_to_drop = args.exclude_clades
     HIGH_THRESHOLD_PROPORTION = args.high_min_prop
+
+    # Accept both "--high-prop-clades A B C" and a single quoted "A B C", so a
+    # stray pair of quotes in the Snakefile does not silently match no clade.
+    clades_with_high_proportion_threshold = flatten_clade_list(args.high_prop_clades)
+    clades_to_drop = flatten_clade_list(args.exclude_clades)
     json_path = args.properties
 
     df = pd.read_csv(
@@ -70,24 +76,16 @@ def main():
     )
 
     clade_muts.rename("mut_count", inplace=True)
-    clade_muts
-
     clade_count = df.groupby("clade").count()
     clade_count.rename(columns={"substitutions": "clade_count"}, inplace=True)
-    clade_count
-
     mutations = pd.DataFrame(clade_muts).reset_index()
     mutations.rename(columns={"level_1": "mutation"}, inplace=True)
     mutations = mutations.join(clade_count, on="clade")
-    mutations
-
     mutations["proportion"] = mutations["mut_count"] / mutations["clade_count"]
     mutations.sort_values(
         by=["clade", "proportion"], ascending=False, inplace=True
     )
     mutations["genotype"] = mutations["mutation"].apply(lambda x: x[1:])
-    mutations
-
 
     min_proportion = mutations["clade"].apply(lambda x: HIGH_THRESHOLD_PROPORTION if x in clades_with_high_proportion_threshold else MIN_PROPORTION)
 
@@ -95,11 +93,15 @@ def main():
     relevant = mutations[
         (mutations["proportion"] > min_proportion)
     ]
-    relevant
-
-    #  newly relevant
-    newly_relevant = relevant[mutations["proportion"] < HIGH_THRESHOLD_PROPORTION]
-    print(newly_relevant[['clade', 'mutation', 'proportion', 'mut_count']].to_csv(args.newly_relevant_output,sep="\t", index=False))
+    # Mutations that pass the per-clade threshold but sit below the strict one.
+    # These are worth eyeballing: they are the borderline calls. The mask has to
+    # come from `relevant` itself, not from `mutations`, or pandas has to
+    # reindex a mismatched boolean Series.
+    newly_relevant = relevant[relevant["proportion"] < HIGH_THRESHOLD_PROPORTION]
+    if args.newly_relevant_output:
+        newly_relevant[["clade", "mutation", "proportion", "mut_count"]].to_csv(
+            args.newly_relevant_output, sep="\t", index=False
+        )
 
     mut_dict = {}
     for mutation, row in relevant.groupby("genotype"):
@@ -109,8 +111,6 @@ def main():
             .to_list()
         )
     mut_dict = dict(sorted(mut_dict.items(), key=lambda item: int(item[0][:-1])))
-    mut_dict
-
     with open(json_path, "w") as f_out:
 
         virus_json = {
