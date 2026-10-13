@@ -672,8 +672,8 @@ rule assemble_dataset:
         pathogen = PATHOGEN_JSON,
         readme = README_PATH,
         changelog = CHANGELOG_PATH,
-    params:
-        pathogen = "out-dataset/pathogen.json",
+    # params:
+        # pathogen = "out-dataset/pathogen.json", # if running mutLabels as part of main workflow, use that instead of the {output.pathogen}
     output:
         tree = "out-dataset/tree.json",
         reference = "out-dataset/reference.fasta",
@@ -681,6 +681,7 @@ rule assemble_dataset:
         sequences = "out-dataset/sequences.fasta",
         readme = "out-dataset/README.md",
         changelog = "out-dataset/CHANGELOG.md",
+        pathogen = "out-dataset/pathogen.json",
         dataset_zip = "dataset.zip",
     shell:
         """
@@ -690,7 +691,7 @@ rule assemble_dataset:
         cp {input.reference} {output.reference}
         cp {input.annotation} {output.annotation}
         cp {input.sequences} {output.sequences}
-        cp {input.pathogen} {params.pathogen}
+        cp {input.pathogen} {output.pathogen}
         cp {input.readme} {output.readme}
         cp {input.changelog} {output.changelog}
         zip -rj dataset.zip  out-dataset/*
@@ -723,60 +724,60 @@ rule extract_clades_tsv:
                 if clade:
                     writer.writerow([accession, clade])
 
-rule mutLabels:
-    """
-    Work out which nucleotide substitutions are characteristic of each clade
-    and merge them into pathogen.json as mutation labels. Nextclade uses these
-    to tell "labelled" from "private" mutations when scoring QC.
-    """
-    message:
-        "Deriving per-clade mutation labels and merging them into pathogen.json"
-    input:
-        table = rules.align.output.tsv,
-        clade = rules.extract_clades_tsv.output.tsv,
-        json = PATHOGEN_JSON,
-    params:
-        # A mutation is labelled for a clade if at least this fraction of the
-        # clade's sequences carry it.
-        min_proportion = 0.2,
-        # Stricter threshold for large, well-sampled clades, where a low cutoff
-        # would label a lot of noise.
-        high_threshold_proportion = 0.60,
-        # CHANGE ME: the clades that should use the stricter threshold above.
-        clades_high_threshold = ["A", "B", "C"],
-        # Clades to ignore entirely; "unassigned" collects everything that did
-        # not fall into a defined clade.
-        clades_to_drop = ["unassigned"],
-    output:
-        clade_meta = "results/clades_mut_metadata.tsv",
-        properties = "results/virus_properties.json",
-        json = "out-dataset/pathogen.json",
-        newly_relevant = "results/newly_relevant_mutations.tsv",
-    shell:
-        """
-        set -euo pipefail
+# rule mutLabels:
+#     """
+#     Work out which nucleotide substitutions are characteristic of each clade
+#     and merge them into pathogen.json as mutation labels. Nextclade uses these
+#     to tell "labelled" from "private" mutations when scoring QC.
+#     """
+#     message:
+#         "Deriving per-clade mutation labels and merging them into pathogen.json"
+#     input:
+#         table = rules.align.output.tsv,
+#         clade = rules.extract_clades_tsv.output.tsv,
+#         json = PATHOGEN_JSON,
+#     params:
+#         # A mutation is labelled for a clade if at least this fraction of the
+#         # clade's sequences carry it.
+#         min_proportion = 0.2,
+#         # Stricter threshold for large, well-sampled clades, where a low cutoff
+#         # would label a lot of noise.
+#         high_threshold_proportion = 0.60,
+#         # CHANGE ME: the clades that should use the stricter threshold above.
+#         clades_high_threshold = ["A", "B", "C"],
+#         # Clades to ignore entirely; "unassigned" collects everything that did
+#         # not fall into a defined clade.
+#         clades_to_drop = ["unassigned"],
+#     output:
+#         clade_meta = "results/clades_mut_metadata.tsv",
+#         properties = "results/virus_properties.json",
+#         json = "out-dataset/pathogen.json",
+#         newly_relevant = "results/newly_relevant_mutations.tsv",
+#     shell:
+#         """
+#         set -euo pipefail
 
-        augur merge \
-            --metadata meta={input.table} clade={input.clade} \
-            --metadata-id-columns meta=seqName clade=accession \
-            --output-metadata {output.clade_meta}
+#         augur merge \
+#             --metadata meta={input.table} clade={input.clade} \
+#             --metadata-id-columns meta=seqName clade=accession \
+#             --output-metadata {output.clade_meta}
 
-        python3 scripts/generate_virus_properties.py \
-            --clade_meta {output.clade_meta} \
-            --properties {output.properties} \
-            --min-prop {params.min_proportion} \
-            --high-min-prop {params.high_threshold_proportion} \
-            --high-prop-clades "{params.clades_high_threshold}" \
-            --exclude-clades "{params.clades_to_drop}" \
-            --newly-relevant-output {output.newly_relevant}
+#         python3 scripts/generate_virus_properties.py \
+#             --clade_meta {output.clade_meta} \
+#             --properties {output.properties} \
+#             --min-prop {params.min_proportion} \
+#             --high-min-prop {params.high_threshold_proportion} \
+#             --high-prop-clades "{params.clades_high_threshold}" \
+#             --exclude-clades "{params.clades_to_drop}" \
+#             --newly-relevant-output {output.newly_relevant}
 
-        jq --slurpfile v {output.properties} \
-           '.mutLabels.nucMutLabelMap = $v[0].nucMutLabelMap |
-            .mutLabels.nucMutLabelMapReverse = $v[0].nucMutLabelMapReverse' \
-           {input.json} > {output.json}
+#         jq --slurpfile v {output.properties} \
+#            '.mutLabels.nucMutLabelMap = $v[0].nucMutLabelMap |
+#             .mutLabels.nucMutLabelMapReverse = $v[0].nucMutLabelMapReverse' \
+#            {input.json} > {output.json}
 
-        zip -rj dataset.zip  out-dataset/*
-        """
+#         zip -rj dataset.zip  out-dataset/*
+#         """
 
 rule clean:
     """
