@@ -94,7 +94,7 @@ Nextclade needs the reference as a FASTA file and its annotation as GFF3. This
 script fetches both from GenBank and helps you tidy up the CDS names:
 
 ```bash
-python3 scripts/generate_from_genbank.py --reference "<accession>" --output-dir dataset/
+python3 scripts/generate_from_genbank.py --reference "M12197" --output-dir dataset/
 ```
 
 The script asks a few questions while it runs. When a genome is annotated both as a whole CDS and as mature peptides, the mature peptides are usually the more

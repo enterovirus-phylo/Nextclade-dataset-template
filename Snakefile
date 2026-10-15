@@ -5,7 +5,7 @@
 # until the values marked "CHANGE ME" below have been filled in, so you get a
 # readable error instead of a confusing crash halfway through a long run.
 
-REFERENCE_ACCESSION = "<accession>"     # CHANGE ME: GenBank accession of your reference, e.g. "AY426531.1"
+REFERENCE_ACCESSION = "M12197.1"     # CHANGE ME: GenBank accession of your reference, e.g. "AY426531.1"
 
 # CDS names that augur ancestral should translate. These must match the
 # product/gene names in resources/reference.gbk *and* the Name attributes in
@@ -21,7 +21,7 @@ ALLOWED_DIVERGENCE = "3000"     # Sequences with more substitutions than this ar
 MIN_DATE           = "1960-01-01"   # Drop anything collected before this date ("" disables)
 MIN_LENGTH         = "6000"     # Drop sequences shorter than this, in bp ("" disables)
 MAX_SEQS           = "10000"    # Upper bound on tree size after subsampling
-ROOTING            = "ancestral_sequence"  # "ancestral_sequence", "mid_point", "outgroup" or an accession
+ROOTING            = "mid_point"  # "ancestral_sequence", "mid_point", "outgroup" or an accession
 ID_FIELD           = "accession"  # Metadata column holding the sequence IDs: "accession" or "strain"
 
 # =============================================================================
@@ -36,7 +36,7 @@ FETCH_SEQUENCES = True
 # Root the reference tree on a precomputed ancestral sequence
 # (resources/inferred-root.fasta) rather than on the reference or midpoint.
 # See inferred-root/README.md for the background.
-STATIC_ANCESTRAL_INFERRENCE = True
+STATIC_ANCESTRAL_INFERRENCE = False
 
 # Recompute resources/inferred-root.fasta from the current sequence set.
 # This is slow and overwrites the existing file, so it is off by default.
@@ -656,7 +656,6 @@ rule subsample_example_sequences:
             --probabilistic-sampling \
             --output-sequences {output.example_sequences}
         """
-
 rule assemble_dataset:
     """
     Collect the finished dataset files into out-dataset/ and pack them into
@@ -789,3 +788,12 @@ rule clean:
         rm -rf results out-dataset tmp dataset.zip
         rm -rf data ingest/data ingest/logs ingest/benchmarks
         """
+
+rule viz:
+    input: "results/auspice.json"
+    shell: "auspice view --datasetDir results"
+
+rule serve:
+    input: "out-dataset/tree.json","results/virus_properties.json"
+    params: "out-dataset"
+    shell: "serve --cors {params} -l 3000"

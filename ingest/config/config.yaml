@@ -3,10 +3,10 @@ sources: ['genbank']
 conda_environment: "workflow/envs/nextstrain.yaml"
 
 # Required to fetch from Entrez
-entrez_search_term: "< your virus>"
+entrez_search_term: "Poliovirus 2"
 
 # Required to fetch from NCBI Datasets
-ncbi_taxon_id: < taxid > # taxid for <your_virus>
+ncbi_taxon_id: 12083 # taxid for <your_virus>
 
 # A full list of all compatible field names can be found here: https://www.ncbi.nlm.nih.gov/datasets/docs/v2/reference-docs/command-line/dataformat/tsv/dataformat_tsv_virus-genome/
 ncbi_datasets_fields:

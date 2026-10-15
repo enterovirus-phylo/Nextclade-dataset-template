@@ -10,9 +10,9 @@
     "changelog": "CHANGELOG.md"
   },
   "attributes": {
-    "name": "< your virus >",
-    "reference name": "< reference name of your virus >",
-    "reference accession": "< ref accession number of your virus >"
+    "name": "Poliovirus 2",
+    "reference name": "Lansing",
+    "reference accession": "M12197.1"
   },
   "alignmentParams": {
         "penaltyGapExtend": 3,

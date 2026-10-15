@@ -1,0 +1,17 @@
+##gff-version 3
+#!gff-spec-version 1.21
+#!processor NCBI annotwriter
+##sequence-region M12197.1 1 7440
+##species https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=12083
+M12197.1	Genbank	region	1	7440	.	+	.	ID=M12197.1:1..7440;Dbxref=taxon:12083;gbkey=Src;mol_type=genomic RNA;old-name=Poliovirus type 2;strain=Lansing
+M12197.1	Genbank	CDS	748	954	.	+	.	Name=VP4;gbkey=Prot;product=VP4;ID=id-AAA46912.1:1..69
+M12197.1	Genbank	CDS	955	1767	.	+	.	Name=VP2;gbkey=Prot;product=VP2;ID=id-AAA46912.1:70..340
+M12197.1	Genbank	CDS	1768	2481	.	+	.	Name=VP3;gbkey=Prot;product=VP3;ID=id-AAA46912.1:341..578
+M12197.1	Genbank	CDS	2482	3384	.	+	.	Name=VP1;gbkey=Prot;product=VP1;ID=id-AAA46912.1:579..879
+M12197.1	Genbank	CDS	3385	3831	.	+	.	Name=2A;product=2A;gbkey=Prot;ID=id-AAA46912.1:880..1028
+M12197.1	Genbank	CDS	3832	4122	.	+	.	Name=2B;gbkey=Prot;ID=id-AAA46912.1:1029..1125;product=2B
+M12197.1	Genbank	CDS	4123	5109	.	+	.	Name=2C;gbkey=Prot;ID=id-AAA46912.1:1126..1454;product=2C
+M12197.1	Genbank	CDS	5110	5370	.	+	.	Name=3A;gbkey=Prot;ID=id-AAA46912.1:1455..1541;product=3A
+M12197.1	Genbank	CDS	5371	5436	.	+	.	Name=3B;gbkey=Prot;ID=id-AAA46912.1:1542..1563;product=3B
+M12197.1	Genbank	CDS	5437	5985	.	+	.	Name=3C;product=3C;gbkey=Prot;ID=id-AAA46912.1:1564..1746
+M12197.1	Genbank	CDS	5986	7368	.	+	.	Name=3D;gbkey=Prot;product=3D;ID=id-AAA46912.1:1747..2207
