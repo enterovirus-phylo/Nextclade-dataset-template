@@ -14,6 +14,10 @@ marked `CHANGE ME` in the `Snakefile`.
 
 ---
 
+## Overview of Nextclade Workflow
+
+![Nextclade Workflow Sketch](workflow.svg)
+
 ## Contents
 
 - [What you get](#what-you-get)
