@@ -284,6 +284,10 @@ Alternatively, view the tree locally:
 ```bash
 auspice view --datasetDir results
 ```
+Or run:
+```bash
+snakemake -c 9 viz
+```
 
 What Auspice displays — colourings and filters — is controlled by [auspice_config.json](resources/auspice_config.json). Further configuration options are described in the [Nextclade reference-tree documentation](https://docs.nextstrain.org/projects/nextclade/en/stable/user/input-files/04-reference-tree.html).
 
@@ -293,6 +297,11 @@ Serve `out-dataset/` locally and point Nextclade at it:
 
 ```bash
 serve --cors out-dataset -l 3000
+```
+
+Or run:
+```bash
+snakemake -c 9 serve
 ```
 
 Then open:
