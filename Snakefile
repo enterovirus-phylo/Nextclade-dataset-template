@@ -790,3 +790,12 @@ rule clean:
         rm -rf results out-dataset tmp dataset.zip
         rm -rf data ingest/data ingest/logs ingest/benchmarks
         """
+
+rule viz:
+    input: "results/auspice.json"
+    shell: "auspice view --datasetDir results"
+
+rule serve:
+    input: "out-dataset/tree.json","results/virus_properties.json"
+    params: "out-dataset"
+    shell: "serve --cors {params} -l 3000"
